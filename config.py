@@ -1,6 +1,6 @@
 import os
 
-class LoRAConfig:
+class Config:
     base_model = "mistralai/Mistral-7B-Instruct-v0.1"
     lora_rank = 8
     lora_alpha = 16
