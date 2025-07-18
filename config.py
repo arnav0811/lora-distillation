@@ -32,7 +32,7 @@ def setup_directory():
 
 if __name__ == "__main__":
     setup_directory()
-    config = LoRAConfig()
+    config = Config()
     print("Base Model: ", config.base_model)
     print("LORA Rank: ", config.lora_rank)
 
