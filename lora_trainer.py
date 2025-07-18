@@ -17,11 +17,26 @@ class LoRATrainer:
         self.tokenizer = AutoTokenizer.from_pretrained(self.config.base_model)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+        if self.config.quantization:
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit = True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4"
+            )
+        else:
+            quantization_config = None
         
-        base_model = AutoModelForCausalLM.from_pretrained(self.config.base_model, torch_dtype = torch.bfloat16, device_map = "auto", load_in_4bit = self.config.quantization)
+        base_model = AutoModelForCausalLM.from_pretrained(self.config.base_model, torch_dtype = torch.bfloat16, device_map = "auto", quantization_config = quantization_config, trust_remote_code = True)
+
+        if self.config.checkpointing:
+            base_model.gradient_checkpointing_enable()
+        
         lora_config = LoraConfig(r = self.config.lora_rank, lora_alpha = self.config.lora_alpha, target_modules = self.config.lora_target_modules, lora_dropout = self.config.lora_dropout, bias = "none", task_type = TaskType.CAUSAL_LM)
         
         self.model = get_peft_model(base_model, lora_config)
+
+        self.model.train()
 
         # Number of parameters that will be updated during training requires_grad
         trainable_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
@@ -64,7 +79,7 @@ class LoRATrainer:
             eval_steps = self.config.eval_steps,
             save_steps = self.config.save_steps,
             save_strategy = "steps",
-            gradient_checkpointing = self.config.checkpointing,
+            gradient_checkpointing = False,
             report_to = "none"
         )
 
