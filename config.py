@@ -27,8 +27,8 @@ class Config:
     save_steps = 200
 
 def setup_directory():
-    os.makedirs("models")
-    os.makedirs(Config.output_directory)
+    os.makedirs("models", exist_ok=True)
+    os.makedirs(Config.output_directory, exist_ok=True)
 
 if __name__ == "__main__":
     setup_directory()
