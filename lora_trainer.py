@@ -1,7 +1,7 @@
 from config import Config
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, DataCollatorForLanguageModeling, BitsAndBytesConfig
 import torch
-from peft import LoraConfig, TaskType, get_peft_model
+from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 import json
 from datasets import Dataset
 
@@ -27,18 +27,18 @@ class LoRATrainer:
         else:
             quantization_config = None
         
-        base_model = AutoModelForCausalLM.from_pretrained(self.config.base_model, torch_dtype = torch.bfloat16, device_map = "auto", quantization_config = quantization_config, trust_remote_code = True)
+        base_model = AutoModelForCausalLM.from_pretrained(self.config.base_model, torch_dtype = torch.bfloat16, device_map = "auto", quantization_config = quantization_config, trust_remote_code = True, use_cache = False)
 
+        if self.config.quantization:
+            base_model = prepare_model_for_kbit_training(base_model)
+        
         if self.config.checkpointing:
             base_model.gradient_checkpointing_enable()
         
         lora_config = LoraConfig(r = self.config.lora_rank, lora_alpha = self.config.lora_alpha, target_modules = self.config.lora_target_modules, lora_dropout = self.config.lora_dropout, bias = "none", task_type = TaskType.CAUSAL_LM)
         
         self.model = get_peft_model(base_model, lora_config)
-        self.model.config.label_names = ["labels"]
-
-        for name, param in self.model.named_parameters():
-            param.requires_grad = "lora_" in name
+        self.model.config.use_cache = False
 
         self.model.train()
 
@@ -58,7 +58,9 @@ class LoRATrainer:
         eval_text = [i['text'] for i in self.eval_data]
         
         def tokenize_data(text):
-            return self.tokenizer(text['text'], truncation = True, padding = False, max_length = self.config.max_len, return_tensors = None)
+            outputs = self.tokenizer(text['text'], truncation = True, padding = False, max_length = self.config.max_len, return_tensors = None)
+            outputs["labels"] = outputs["input_ids"].copy()
+            return outputs
 
         self.train_data = Dataset.from_dict({"text": train_text})
         self.eval_data = Dataset.from_dict({"text": eval_text})
@@ -83,15 +85,17 @@ class LoRATrainer:
             eval_steps = self.config.eval_steps,
             save_steps = self.config.save_steps,
             save_strategy = "steps",
-            gradient_checkpointing=self.config.checkpointing,
+            gradient_checkpointing = self.config.checkpointing,
             report_to = "none",
             dataloader_drop_last=True,
             optim="adamw_torch",
+            label_names = ["labels"],
+            remove_unused_columns = False,
         )
 
         # Intelligent Batching without masked lang modelling
-        data_collator = DataCollatorForLanguageModeling(tokenizer = self.tokenizer, mlm = False)
-        trainer = Trainer(model = self.model, args = training_args, train_dataset = self.train_data, eval_dataset = self.eval_data, data_collator = data_collator)
+        data_collator = DataCollatorForLanguageModeling(tokenizer = self.tokenizer, mlm = False, pad_to_multiple_of = 8)
+        trainer = Trainer(model = self.model, args = training_args, train_dataset = self.train_data, eval_dataset = self.eval_data, data_collator = data_collator, tokenizer = self.tokenizer)
         trainer.train()
 
         trainer.save_model(self.config.output_directory)
