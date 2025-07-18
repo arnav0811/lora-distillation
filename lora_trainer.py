@@ -1,5 +1,5 @@
 from config import Config
-from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, DataCollatorForLanguageModeling
+from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, DataCollatorForLanguageModeling, BitsAndBytesConfig
 import torch
 from peft import LoraConfig, TaskType, get_peft_model
 import json
