@@ -60,7 +60,7 @@ class LoRATrainer:
             learning_rate = self.config.lr,
             bf16 = True,
             logging_steps = self.config.logging_steps,
-            evaluation_strategy = "steps",
+            eval_strategy = "steps",
             eval_steps = self.config.eval_steps,
             save_steps = self.config.save_steps,
             save_strategy = "steps",
