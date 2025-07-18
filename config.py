@@ -28,7 +28,7 @@ class Config:
 
 def setup_directory():
     os.makedirs("models")
-    os.makedirs(LoRAConfig.output_directory)
+    os.makedirs(Config.output_directory)
 
 if __name__ == "__main__":
     setup_directory()
