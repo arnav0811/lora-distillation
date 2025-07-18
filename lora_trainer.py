@@ -29,12 +29,16 @@ class LoRATrainer:
         
         base_model = AutoModelForCausalLM.from_pretrained(self.config.base_model, torch_dtype = torch.bfloat16, device_map = "auto", quantization_config = quantization_config, trust_remote_code = True)
 
-        if self.config.checkpointing:
-            base_model.gradient_checkpointing_enable()
+        # if self.config.checkpointing:
+        #     base_model.gradient_checkpointing_enable()
         
         lora_config = LoraConfig(r = self.config.lora_rank, lora_alpha = self.config.lora_alpha, target_modules = self.config.lora_target_modules, lora_dropout = self.config.lora_dropout, bias = "none", task_type = TaskType.CAUSAL_LM)
         
         self.model = get_peft_model(base_model, lora_config)
+
+        for name, param in self.model.named_parameters():
+            if 'lora_' in name:
+                param.requires_grad = True
 
         self.model.train()
 
@@ -79,8 +83,10 @@ class LoRATrainer:
             eval_steps = self.config.eval_steps,
             save_steps = self.config.save_steps,
             save_strategy = "steps",
-            gradient_checkpointing = False,
-            report_to = "none"
+            gradient_checkpointing=self.config.checkpointing,
+            report_to = "none",
+            dataloader_drop_last=True,
+            optim="adamw_torch",
         )
 
         # Intelligent Batching without masked lang modelling
