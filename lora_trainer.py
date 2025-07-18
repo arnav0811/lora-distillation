@@ -29,16 +29,16 @@ class LoRATrainer:
         
         base_model = AutoModelForCausalLM.from_pretrained(self.config.base_model, torch_dtype = torch.bfloat16, device_map = "auto", quantization_config = quantization_config, trust_remote_code = True)
 
-        # if self.config.checkpointing:
-        #     base_model.gradient_checkpointing_enable()
+        if self.config.checkpointing:
+            base_model.gradient_checkpointing_enable()
         
         lora_config = LoraConfig(r = self.config.lora_rank, lora_alpha = self.config.lora_alpha, target_modules = self.config.lora_target_modules, lora_dropout = self.config.lora_dropout, bias = "none", task_type = TaskType.CAUSAL_LM)
         
         self.model = get_peft_model(base_model, lora_config)
+        self.model.config.label_names = ["labels"]
 
         for name, param in self.model.named_parameters():
-            if 'lora_' in name:
-                param.requires_grad = True
+            param.requires_grad = "lora_" in name
 
         self.model.train()
 
