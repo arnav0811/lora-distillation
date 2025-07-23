@@ -1,7 +1,7 @@
 from config import Config
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, DataCollatorForLanguageModeling, BitsAndBytesConfig
 import torch
-from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
+from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training, TaskType
 import json
 from datasets import Dataset
 
@@ -56,11 +56,20 @@ class LoRATrainer:
 
         train_text = [i['text'] for i in self.train_data]
         eval_text = [i['text'] for i in self.eval_data]
+
+        def prepare_dataset(data_list, desc):
+            texts = []
+            for i, item in enumerate(data_list):
+                if i % 1000 == 0:
+                    print(f"  {idx}/{len(data_list)} done")
+                texts.append(item['text'])
+            dataset = Dataset.from_dict({"text": texts})
         
-        def tokenize_data(text):
-            outputs = self.tokenizer(text['text'], truncation = True, padding = False, max_length = self.config.max_len, return_tensors = None)
-            outputs["labels"] = outputs["input_ids"].copy()
-            return outputs
+            def tokenize_data(text):
+                return self.tokenizer(text['text'], truncation = True, padding = False, max_length = self.config.max_len, return_special_tokens_mask = True)
+            tokenized_dataset = dataset.map(tokenize_function, batched = True, num_proc = 1, remove_columns = dataset.column_names, desc = f"Tokenizing {desc}",)
+            return tokenized_dataset
+                
 
         self.train_data = Dataset.from_dict({"text": train_text})
         self.eval_data = Dataset.from_dict({"text": eval_text})
@@ -86,10 +95,11 @@ class LoRATrainer:
             save_steps = self.config.save_steps,
             save_strategy = "steps",
             gradient_checkpointing = self.config.checkpointing,
+            gradient_checkpointing_kwargs = {"use_reentrant": False} if self.config.checkpointing else None,
             report_to = "none",
             dataloader_drop_last=True,
-            optim="adamw_torch",
-            label_names = ["labels"],
+            optim = "adamw_torch",
+            fp16_full_eval = False,
             remove_unused_columns = False,
         )
 
